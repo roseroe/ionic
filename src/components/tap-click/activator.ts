@@ -8,6 +8,7 @@ export class Activator {
   protected _queue: HTMLElement[] = [];
   protected _active: HTMLElement[] = [];
   protected _activeRafDefer: Function;
+  protected _clearRafDefer: Function;
 
   constructor(protected app: App, config: Config) {
     this._css = config.get('activatedClass') || 'activated';
@@ -16,6 +17,8 @@ export class Activator {
   clickAction(ev: UIEvent, activatableEle: HTMLElement, startCoord: PointerCoordinates) {
     // a click happened, so immediately deactive all activated elements
     this._clearDeferred();
+    this._scheduleClear();
+
     this._queue.length = 0;
 
     for (var i = 0; i < this._active.length; i++) {
@@ -35,6 +38,9 @@ export class Activator {
     if (this.disableActivated(ev)) {
       return;
     }
+
+    this.unscheduleClear();
+    this.deactivate();
 
     // queue to have this element activated
     this._queue.push(activatableEle);
@@ -56,15 +62,28 @@ export class Activator {
   // the user was pressing down, then just let up
   upAction(ev: UIEvent, activatableEle: HTMLElement, startCoord: PointerCoordinates) {
     this._clearDeferred();
+    this._scheduleClear();
+  }
 
-    rafFrames(CLEAR_STATE_DEFERS, () => {
+  _scheduleClear() {
+    if (this._clearRafDefer) {
+      return;
+    }
+    this._clearRafDefer = rafFrames(CLEAR_STATE_DEFERS, () => {
       this.clearState();
+      this._clearRafDefer = null;
     });
+  }
+
+  unscheduleClear() {
+    if (this._clearRafDefer) {
+      this._clearRafDefer();
+      this._clearRafDefer = null;
+    }
   }
 
   // all states should return to normal
   clearState() {
-
     if (!this.app.isEnabled()) {
       // the app is actively disabled, so don't bother deactivating anything.
       // this makes it easier on the GPU so it doesn't have to redraw any
@@ -85,12 +104,10 @@ export class Activator {
 
     this._queue.length = 0;
 
-    rafFrames(2, () => {
-      for (var i = 0; i < this._active.length; i++) {
-        this._active[i].classList.remove(this._css);
-      }
-      this._active.length = 0;
-    });
+    for (var i = 0; i < this._active.length; i++) {
+      this._active[i].classList.remove(this._css);
+    }
+    this._active.length = 0;
   }
 
   _clearDeferred() {
@@ -121,4 +138,4 @@ export class Activator {
 
 }
 
-const CLEAR_STATE_DEFERS = 5;
+const CLEAR_STATE_DEFERS = 6;
